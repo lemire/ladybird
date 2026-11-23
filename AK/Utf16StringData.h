@@ -73,6 +73,7 @@ public:
     static_assert(ContainsNonAscii == 8);
 
     static NonnullRefPtr<Utf16StringData> from_utf8(StringView);
+    static RefPtr<Utf16StringData> try_from_utf8(StringView);
     static NonnullRefPtr<Utf16StringData> from_ascii(ReadonlyBytes);
     static NonnullRefPtr<Utf16StringData> from_utf16(Utf16View const&);
     static NonnullRefPtr<Utf16StringData> from_string_builder(Utf16StringBuilder&);

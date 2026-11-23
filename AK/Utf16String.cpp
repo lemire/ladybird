@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include <AK/RefPtr.h>
 #include <AK/Stream.h>
 #include <AK/StringNumber.h>
 #include <AK/Utf16String.h>
@@ -28,6 +29,34 @@ static Utf16String from_bytes_with_replacement_character(StringView string, Allo
     });
 
     return builder.to_string();
+}
+
+Optional<Utf16String> Utf16String::from_well_formed_utf8(StringView utf8_string)
+{
+    if (utf8_string.length() <= Detail::MAX_SHORT_STRING_BYTE_COUNT && utf8_string.is_ascii())
+        return from_utf8_without_validation(utf8_string);
+
+    if (auto string = Detail::Utf16StringData::try_from_utf8(utf8_string))
+        return Utf16String { string.release_nonnull() };
+    return {};
+}
+
+ErrorOr<Utf16String> Utf16String::try_from_utf8(StringView utf8_string)
+{
+    // NB: Converting validates well-formed UTF-8. Only other text, such as WTF-8 with encoded lone surrogates, which
+    //     we also accept, needs a separate validation.
+    if (auto string = from_well_formed_utf8(utf8_string); string.has_value())
+        return string.release_value();
+    if (!Utf8View { utf8_string }.validate())
+        return Error::from_string_literal("Input was not valid UTF-8");
+    return Utf16String { Detail::Utf16StringData::from_utf8(utf8_string) };
+}
+
+Utf16String Utf16String::from_utf8(StringView utf8_string)
+{
+    auto string = try_from_utf8(utf8_string);
+    VERIFY(!string.is_error());
+    return string.release_value();
 }
 
 Utf16String Utf16String::from_utf8_with_replacement_character(StringView utf8_string, WithBOMHandling with_bom_handling)
