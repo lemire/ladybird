@@ -16,21 +16,6 @@ namespace AK {
 
 static_assert(sizeof(Detail::ShortString) == sizeof(Detail::Utf16StringData*));
 
-static Utf16String from_bytes_with_replacement_character(StringView string, AllowLonelySurrogates allow_lonely_surrogates)
-{
-    Utf8View utf8_view { string };
-
-    if (utf8_view.validate(AllowLonelySurrogates::No))
-        return Utf16String::from_utf8_without_validation(string);
-
-    Utf16StringBuilder builder;
-    utf8_view.for_each_code_point_with_replacement_character(allow_lonely_surrogates, [&](u32 code_point) {
-        builder.append_code_point(code_point);
-    });
-
-    return builder.to_string();
-}
-
 Optional<Utf16String> Utf16String::from_well_formed_utf8(StringView utf8_string)
 {
     if (utf8_string.length() <= Detail::MAX_SHORT_STRING_BYTE_COUNT && utf8_string.is_ascii())
@@ -64,12 +49,25 @@ Utf16String Utf16String::from_utf8_with_replacement_character(StringView utf8_st
     if (auto bytes = utf8_string.bytes(); with_bom_handling == WithBOMHandling::Yes && bytes.starts_with({ { 0xEF, 0xBB, 0xBF } }))
         utf8_string = utf8_string.substring_view(3);
 
-    return from_bytes_with_replacement_character(utf8_string, AllowLonelySurrogates::No);
+    if (utf8_string.length() <= Detail::MAX_SHORT_STRING_BYTE_COUNT && utf8_string.is_ascii())
+        return from_utf8_without_validation(utf8_string);
+
+    return Utf16String { Detail::Utf16StringData::from_utf8_with_replacement_character(utf8_string) };
 }
 
 Utf16String Utf16String::from_wtf8_with_replacement_character(StringView wtf8_string)
 {
-    return from_bytes_with_replacement_character(wtf8_string, AllowLonelySurrogates::Yes);
+    Utf8View utf8_view { wtf8_string };
+
+    if (utf8_view.validate(AllowLonelySurrogates::No))
+        return Utf16String::from_utf8_without_validation(wtf8_string);
+
+    Utf16StringBuilder builder;
+    utf8_view.for_each_code_point_with_replacement_character(AllowLonelySurrogates::Yes, [&](u32 code_point) {
+        builder.append_code_point(code_point);
+    });
+
+    return builder.to_string();
 }
 
 Utf16String Utf16String::from_ascii_without_validation(ReadonlyBytes ascii_string)
