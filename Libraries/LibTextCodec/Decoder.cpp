@@ -9,7 +9,6 @@
 
 #include <AK/StringBuilder.h>
 #include <AK/Utf16StringBuilder.h>
-#include <AK/Utf8View.h>
 #include <LibTextCodec/Decoder.h>
 #include <RustFFI.h>
 
@@ -125,8 +124,11 @@ ErrorOr<String> Decoder::to_utf8(ReadonlyBytes input, ErrorMode error_mode) cons
 
 ErrorOr<Utf16String> Decoder::to_utf16(ReadonlyBytes input) const
 {
-    if (m_encoding == "UTF-8"sv && Utf8View { StringView { input } }.validate(AllowLonelySurrogates::No))
-        return Utf16String::from_utf8_without_validation(StringView { input });
+    // OPTIMIZATION: Decode UTF-8 with simdutf, which converts well-formed UTF-8 in a single pass that also validates it,
+    //               and replaces each maximal subpart of an ill-formed sequence with U+FFFD, as the UTF-8 decoder below
+    //               does. Like that decoder, it leaves a byte order mark in place.
+    if (m_encoding == "UTF-8"sv)
+        return Utf16String::from_utf8_with_replacement_character(StringView { input }, Utf16String::WithBOMHandling::No);
 
     Utf16DecodeContext context { .builder = Utf16StringBuilder(input.size()) };
     auto succeeded = FFI::textcodec_rust_decode_to_utf16(
