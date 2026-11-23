@@ -35,14 +35,16 @@ ErrorOr<String> Utf16View::to_utf8(AllowLonelySurrogates allow_lonely_surrogates
     }
 
     if (allow_lonely_surrogates == AllowLonelySurrogates::No) {
-        if (!validate())
-            return Error::from_string_literal("Input was not valid UTF-16");
-
+        // NB: simdutf validates UTF-16 as it converts it, and does not write past the length that it computes for the
+        //     same input, even if the input is invalid. So there is no separate validation: the conversion of this
+        //     non-empty string returns 0 if, and only if, the string is invalid.
         String result;
         auto utf8_length = simdutf::utf8_length_from_utf16(m_string.utf16, length_in_code_units());
 
         TRY(result.replace_with_new_string(Badge<Utf16View> {}, utf8_length, [&](Bytes buffer) -> ErrorOr<void> {
-            [[maybe_unused]] auto result = simdutf::convert_utf16_to_utf8(m_string.utf16, length_in_code_units(), reinterpret_cast<char*>(buffer.data()));
+            auto result = simdutf::convert_utf16_to_utf8(m_string.utf16, length_in_code_units(), reinterpret_cast<char*>(buffer.data()));
+            if (result == 0)
+                return Error::from_string_literal("Input was not valid UTF-16");
             ASSERT(result == buffer.size());
             return {};
         }));
